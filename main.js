@@ -2,6 +2,7 @@ import { app, BrowserWindow, globalShortcut, ipcMain } from "electron";
 import screenshotDesktop from "screenshot-desktop";
 import AIStrategyFactory from "./src/(core)/ai/providerFactory.js";
 import dotenv from "dotenv";
+import path from "path";
 
 // Load environment variables
 dotenv.config();
@@ -10,21 +11,28 @@ let mainWindow;
 let isVisible = true;
 let lastScreenshot = null;
 let aiStrategy = null;
+let isSettingsOpen = false;
 
 // Initialize the AI strategy
-async function initializeAI() {
-  const provider = process.env.AI_PROVIDER || "anthropic";
-  const apiKey = process.env[`${provider.toUpperCase()}_API_KEY`];
-  const model = process.env[`${provider.toUpperCase()}_MODEL`];
+async function initializeAI(settings) {
+  const provider = settings?.provider || process.env.AI_PROVIDER || "openai";
+  const apiKey = settings?.apiKey || process.env[`${provider.toUpperCase()}_API_KEY`];
+  const model = settings?.model || process.env[`${provider.toUpperCase()}_MODEL`];
 
   if (!apiKey) {
-    console.error(`API key for ${provider} not found in environment variables`);
+    console.error(`API key for ${provider} not found in environment variables or settings`);
     return false;
   }
 
   try {
     aiStrategy = AIStrategyFactory.createStrategy(provider, apiKey, model);
     await aiStrategy.initialize();
+    // Store the current settings
+    global.currentSettings = {
+      provider,
+      model,
+      apiKey
+    };
     return true;
   } catch (error) {
     console.error("Failed to initialize AI strategy:", error);
@@ -58,7 +66,7 @@ async function createWindow() {
     roundedCorners: false,
     visualEffectState: "active",
     opacity: 0.9,
-    focusable: false,
+    focusable: true,
     enableLargerThanScreen: true,
     paintWhenInitiallyHidden: true,
   });
@@ -67,7 +75,12 @@ async function createWindow() {
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setAlwaysOnTop(true, "torn-off-menu", 1);
   mainWindow.setContentProtection(true);
-  mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  
+  function updateMouseInteraction() {
+    mainWindow.setIgnoreMouseEvents(!isSettingsOpen, { forward: true });
+  }
+  
+  updateMouseInteraction();
 
   // Additional protection flags
   if (process.platform === "darwin") {
@@ -167,31 +180,70 @@ async function createWindow() {
     const supportedProviders = AIStrategyFactory.getSupportedProviders();
     mainWindow.webContents.send("show-settings", supportedProviders);
   });
+
+  // Add settings shortcut
+  globalShortcut.register('CommandOrControl+M', () => {
+    isSettingsOpen = !isSettingsOpen;
+    updateMouseInteraction();
+    mainWindow.webContents.send('toggle-settings');
+  });
+
+  // Add IPC handlers for settings
+  ipcMain.on('settings-opened', () => {
+    isSettingsOpen = true;
+    updateMouseInteraction();
+  });
+
+  ipcMain.on('settings-closed', () => {
+    isSettingsOpen = false;
+    updateMouseInteraction();
+  });
+
+  // Register IPC handlers
+  ipcMain.on('initialize-with-settings', async (event, settings) => {
+    if (await initializeAI(settings)) {
+      event.reply('ai-initialized', { success: true });
+    } else {
+      event.reply('ai-initialized', { 
+        success: false, 
+        error: 'Failed to initialize AI with saved settings' 
+      });
+    }
+  });
+
+  ipcMain.on('change-ai-provider', async (event, { provider, apiKey, model }) => {
+    try {
+      aiStrategy = AIStrategyFactory.createStrategy(provider, apiKey, model);
+      await aiStrategy.initialize();
+      // Update current settings
+      global.currentSettings = {
+        provider,
+        model,
+        apiKey
+      };
+      mainWindow.webContents.send('provider-changed', { provider, model });
+    } catch (error) {
+      console.error('Failed to change AI provider:', error);
+      mainWindow.webContents.send(
+        'error',
+        `Failed to change AI provider: ${error.message}`,
+      );
+    }
+  });
+
+  ipcMain.handle('get-current-provider', () => {
+    if (!global.currentSettings) {
+      return {
+        provider: process.env.AI_PROVIDER || "openai",
+        model: process.env.OPENAI_MODEL || "gpt-3.5-turbo"
+      };
+    }
+    return {
+      provider: global.currentSettings.provider,
+      model: global.currentSettings.model
+    };
+  });
 }
-
-ipcMain.on("change-ai-provider", async (event, { provider, apiKey, model }) => {
-  try {
-    aiStrategy = AIStrategyFactory.createStrategy(provider, apiKey, model);
-    await aiStrategy.initialize();
-    mainWindow.webContents.send("provider-changed", provider);
-  } catch (error) {
-    console.error("Failed to change AI provider:", error);
-    mainWindow.webContents.send(
-      "error",
-      `Failed to change AI provider: ${error.message}`,
-    );
-  }
-});
-
-ipcMain.handle("get-current-provider", () => {
-  return {
-    provider: process.env.AI_PROVIDER || "anthropic",
-    model:
-      process.env[
-        `${(process.env.AI_PROVIDER || "anthropic").toUpperCase()}_MODEL`
-      ],
-  };
-});
 
 app.whenReady().then(createWindow);
 

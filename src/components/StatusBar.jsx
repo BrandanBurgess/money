@@ -1,13 +1,18 @@
 import React from 'react';
 
-function StatusBar({ status, screenshotStatus }) {
+function StatusBar({ status, screenshotStatus, provider, model }) {
   return (
-    <div className="flex justify-between items-center py-2 px-4 bg-gray-800/70 rounded-t-lg border-b border-gray-700/30">
-      <div className="flex items-center">
-        <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
-        <span className="text-sm font-medium">{status}</span>
+    <div className="status-bar">
+      <div className="flex items-center space-x-4">
+        <span>{status}</span>
+        <span className="text-gray-400">|</span>
+        <span>{screenshotStatus}</span>
       </div>
-      <span className="text-xs text-gray-400">{screenshotStatus}</span>
+      <div className="flex items-center space-x-2 text-sm text-gray-400">
+        <span>{provider}</span>
+        <span>•</span>
+        <span>{model}</span>
+      </div>
     </div>
   );
 }
