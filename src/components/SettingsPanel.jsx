@@ -22,7 +22,7 @@ function SettingsPanel({ providers, currentProvider, onChangeProvider, onClose }
       <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 border border-gray-700">
         <h3 className="text-xl font-bold mb-4">AI Provider Settings</h3>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form tabIndex={0} onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="ai-provider" className="block text-sm font-medium">
               Provider:

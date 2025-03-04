@@ -18,8 +18,8 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [providers, setProviders] = useState([]);
   const [currentProvider, setCurrentProvider] = useState({
-    provider: 'anthropic',
-    model: 'claude-3-opus-20240229'
+    provider: 'openai',
+    model: 'gpt-4o'
   });
 
   useEffect(() => {
