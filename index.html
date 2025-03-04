@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LeetCode Assistant</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            color: #333;
+            height: 100vh;
+            overflow-y: auto;
+            -webkit-app-region: drag;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(240, 240, 240, 0.85);
+            padding: 8px 20px;
+            font-size: 12px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+
+        .content {
+            margin-top: 40px;
+            padding: 20px;
+            background-color: rgba(255, 255, 255, 0.85);
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+
+        .solution {
+            font-size: 14px;
+            line-height: 1.6;
+            margin-top: 20px;
+        }
+
+        pre {
+            background-color: rgba(240, 240, 240, 0.8);
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        code {
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+        }
+
+        .shortcuts {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(240, 240, 240, 0.85);
+            padding: 8px 20px;
+            font-size: 12px;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+
+        .error {
+            color: #dc3545;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: rgba(220, 53, 69, 0.1);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="status-bar">
+        <span id="status">Ready</span>
+        <span id="screenshot-status">No screenshot taken</span>
+    </div>
+
+    <div class="container">
+        <div class="content">
+            <div id="solution" class="solution">
+                Welcome to LeetCode Assistant!
+                <br><br>
+                Use ⌘+H to take a screenshot of your problem,
+                then ⌘+Enter to get a solution.
+            </div>
+        </div>
+    </div>
+
+    <div class="shortcuts">
+        ⌘+B: Toggle window | ⌘+H: Take screenshot | ⌘+Enter: Get solution | ⌘+Arrow keys: Move window | ⌘+R: Reset | ⌘+Q: Quit
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        // Add screen capture detection handler
+        ipcRenderer.on('screen-capture-detected', () => {
+            // Create warning banner if it doesn't exist
+            if (!document.getElementById('capture-warning')) {
+                const warning = document.createElement('div');
+                warning.id = 'capture-warning';
+                warning.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    background-color: #ff4444;
+                    color: white;
+                    padding: 10px;
+                    text-align: center;
+                    z-index: 9999;
+                `;
+                warning.textContent = '⚠️ Screen recording detected! Content may be visible in screen share.';
+                document.body.prepend(warning);
+
+                // Optionally blur/hide sensitive content
+                document.getElementById('solution').style.filter = 'blur(5px)';
+            }
+        });
+
+        ipcRenderer.on('screenshot-taken', () => {
+            document.getElementById('screenshot-status').textContent = 'Screenshot captured';
+            document.getElementById('status').textContent = 'Ready for analysis';
+        });
+
+        ipcRenderer.on('solution', (event, solution) => {
+            document.getElementById('solution').innerHTML = solution;
+            document.getElementById('status').textContent = 'Solution ready';
+        });
+
+        ipcRenderer.on('error', (event, message) => {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            document.getElementById('solution').prepend(errorDiv);
+        });
+
+        ipcRenderer.on('reset', () => {
+            document.getElementById('solution').innerHTML = 'Welcome to LeetCode Assistant!<br><br>Use ⌘+H to take a screenshot of your problem, then ⌘+Enter to get a solution.';
+            document.getElementById('status').textContent = 'Ready';
+            document.getElementById('screenshot-status').textContent = 'No screenshot taken';
+        });
+    </script>
+</body>
+</html> 

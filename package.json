@@ -1,0 +1,28 @@
+{
+  "name": "leetcode-assistant",
+  "version": "1.0.0",
+  "description": "An AI-powered LeetCode problem solver assistant",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.leetcode.assistant",
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    }
+  },
+  "keywords": ["leetcode", "interview", "coding", "assistant"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.18.0",
+    "electron": "^29.1.0",
+    "screenshot-desktop": "^1.15.0",
+    "keyboardjs": "^2.7.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.13.3"
+  }
+}
