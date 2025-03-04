@@ -1,66 +1,100 @@
-const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
-const path = require('path');
-const screenshot = require('screenshot-desktop');
-const { Anthropic } = require('@anthropic-ai/sdk');
+import { app, BrowserWindow, globalShortcut, ipcMain } from "electron";
+import screenshotDesktop from "screenshot-desktop";
+import AIStrategyFactory from "./src/(core)/ai/providerFactory.js";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
 
 let mainWindow;
 let isVisible = true;
 let lastScreenshot = null;
+let aiStrategy = null;
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// Initialize the AI strategy
+async function initializeAI() {
+  const provider = process.env.AI_PROVIDER || "anthropic";
+  const apiKey = process.env[`${provider.toUpperCase()}_API_KEY`];
+  const model = process.env[`${provider.toUpperCase()}_MODEL`];
 
-function createWindow() {
+  if (!apiKey) {
+    console.error(`API key for ${provider} not found in environment variables`);
+    return false;
+  }
+
+  try {
+    aiStrategy = AIStrategyFactory.createStrategy(provider, apiKey, model);
+    await aiStrategy.initialize();
+    return true;
+  } catch (error) {
+    console.error("Failed to initialize AI strategy:", error);
+    return false;
+  }
+}
+
+async function createWindow() {
+  // Initialize AI strategy
+  if (!(await initializeAI())) {
+    console.error("Failed to initialize AI. Exiting...");
+    app.quit();
+    return;
+  }
+
   mainWindow = new BrowserWindow({
     width: 600,
     height: 800,
     frame: false,
     transparent: true,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
     alwaysOnTop: true,
-    type: 'panel',
+    type: "panel",
     hasShadow: false,
-    titleBarStyle: 'customButtonsOnHover',
+    titleBarStyle: "customButtonsOnHover",
     skipTaskbar: true,
     roundedCorners: false,
-    visualEffectState: 'active',
+    visualEffectState: "active",
     opacity: 0.9,
     focusable: false,
     enableLargerThanScreen: true,
-    paintWhenInitiallyHidden: true
+    paintWhenInitiallyHidden: true,
   });
 
   // Set specific window flags for WebRTC protection
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  mainWindow.setAlwaysOnTop(true, 'torn-off-menu', 1);
+  mainWindow.setAlwaysOnTop(true, "torn-off-menu", 1);
   mainWindow.setContentProtection(true);
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
-  
+
   // Additional protection flags
-  if (process.platform === 'darwin') {
+  if (process.platform === "darwin") {
     mainWindow.setHiddenInMissionControl(true);
     app.dock.hide();
-    
+
     // Set window to highest safe level that avoids WebRTC capture
     mainWindow.setWindowButtonVisibility(false);
-    mainWindow.setBackgroundColor('#00000000');
+    mainWindow.setBackgroundColor("#00000000");
   }
 
   // Ensure window is properly layered
-  mainWindow.once('ready-to-show', () => {
+  mainWindow.once("ready-to-show", () => {
     mainWindow.show();
-    mainWindow.setAspectRatio(600/800);
+    mainWindow.setAspectRatio(600 / 800);
   });
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile("index.html");
+
+  // For development:
+  mainWindow.loadURL("http://localhost:5173");
+
+  // For production:
+  // mainWindow.loadFile('dist/index.html');
 
   // Register global shortcuts
-  globalShortcut.register('CommandOrControl+B', () => {
+  globalShortcut.register("CommandOrControl+B", () => {
     if (isVisible) {
       mainWindow.hide();
     } else {
@@ -69,88 +103,111 @@ function createWindow() {
     isVisible = !isVisible;
   });
 
-  globalShortcut.register('CommandOrControl+H', async () => {
+  globalShortcut.register("CommandOrControl+H", async () => {
     try {
       lastScreenshot = await screenshot();
-      mainWindow.webContents.send('screenshot-taken');
+      mainWindow.webContents.send("screenshot-taken");
     } catch (error) {
-      console.error('Screenshot error:', error);
+      console.error("Screenshot error:", error);
     }
   });
 
-  globalShortcut.register('CommandOrControl+Enter', async () => {
+  globalShortcut.register("CommandOrControl+Enter", async () => {
     if (!lastScreenshot) {
-      mainWindow.webContents.send('error', 'No screenshot available');
+      mainWindow.webContents.send("error", "No screenshot available");
       return;
     }
 
     try {
-      const response = await anthropic.messages.create({
-        model: 'claude-3-opus-20240229',
-        max_tokens: 4000,
-        messages: [{
-          role: 'user',
-          content: `I'm going to share a screenshot of a coding problem. Please analyze it and provide:
-          1. A clear explanation of your thought process
-          2. An efficient solution with detailed code
-          3. Time and space complexity analysis
-          Please format your response in markdown.`
-        }],
-        system: "You are an expert coding interview assistant. Provide clear, efficient solutions with detailed explanations."
-      });
-
-      mainWindow.webContents.send('solution', response.content);
+      mainWindow.webContents.send("processing", true);
+      const solution = await aiStrategy.generateSolution(lastScreenshot);
+      mainWindow.webContents.send("solution", solution);
     } catch (error) {
-      console.error('Claude API error:', error);
-      mainWindow.webContents.send('error', 'Failed to get solution from Claude');
+      console.error("AI API error:", error);
+      mainWindow.webContents.send(
+        "error",
+        `Failed to get solution: ${error.message}`,
+      );
+    } finally {
+      mainWindow.webContents.send("processing", false);
     }
   });
 
   // Window movement shortcuts
-  globalShortcut.register('CommandOrControl+Up', () => {
+  globalShortcut.register("CommandOrControl+Up", () => {
     const [x, y] = mainWindow.getPosition();
     mainWindow.setPosition(x, y - 10);
   });
 
-  globalShortcut.register('CommandOrControl+Down', () => {
+  globalShortcut.register("CommandOrControl+Down", () => {
     const [x, y] = mainWindow.getPosition();
     mainWindow.setPosition(x, y + 10);
   });
 
-  globalShortcut.register('CommandOrControl+Left', () => {
+  globalShortcut.register("CommandOrControl+Left", () => {
     const [x, y] = mainWindow.getPosition();
     mainWindow.setPosition(x - 10, y);
   });
 
-  globalShortcut.register('CommandOrControl+Right', () => {
+  globalShortcut.register("CommandOrControl+Right", () => {
     const [x, y] = mainWindow.getPosition();
     mainWindow.setPosition(x + 10, y);
   });
 
-  globalShortcut.register('CommandOrControl+R', () => {
+  globalShortcut.register("CommandOrControl+R", () => {
     lastScreenshot = null;
-    mainWindow.webContents.send('reset');
+    mainWindow.webContents.send("reset");
   });
 
-  globalShortcut.register('CommandOrControl+Q', () => {
+  globalShortcut.register("CommandOrControl+Q", () => {
     app.quit();
+  });
+
+  globalShortcut.register("CommandOrControl+S", () => {
+    const supportedProviders = AIStrategyFactory.getSupportedProviders();
+    mainWindow.webContents.send("show-settings", supportedProviders);
   });
 }
 
+ipcMain.on("change-ai-provider", async (event, { provider, apiKey, model }) => {
+  try {
+    aiStrategy = AIStrategyFactory.createStrategy(provider, apiKey, model);
+    await aiStrategy.initialize();
+    mainWindow.webContents.send("provider-changed", provider);
+  } catch (error) {
+    console.error("Failed to change AI provider:", error);
+    mainWindow.webContents.send(
+      "error",
+      `Failed to change AI provider: ${error.message}`,
+    );
+  }
+});
+
+ipcMain.handle("get-current-provider", () => {
+  return {
+    provider: process.env.AI_PROVIDER || "anthropic",
+    model:
+      process.env[
+        `${(process.env.AI_PROVIDER || "anthropic").toUpperCase()}_MODEL`
+      ],
+  };
+});
+
 app.whenReady().then(createWindow);
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on('activate', () => {
+app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 });
 
-app.on('will-quit', () => {
+app.on("will-quit", () => {
   globalShortcut.unregisterAll();
-}); 
+});
+
