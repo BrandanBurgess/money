@@ -30,7 +30,7 @@ function App() {
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [providers, setProviders] = useState([]);
-  
+
   // Load all provider configs from localStorage
   const [providerConfigs, setProviderConfigs] = useState(() => {
     const saved = localStorage.getItem('providerConfigs');
@@ -44,7 +44,7 @@ function App() {
   const [currentProvider, setCurrentProvider] = useState(() => {
     const saved = localStorage.getItem('currentProvider');
     const providerId = saved || 'openai';
-    
+
     // Get the config for this provider
     const configs = JSON.parse(localStorage.getItem('providerConfigs')) || DEFAULT_PROVIDER_CONFIGS;
     return configs[providerId];
@@ -151,9 +151,9 @@ function App() {
 
   return (
     <div className="app-container p-4 flex flex-col h-screen">
-      <StatusBar 
-        status={status} 
-        screenshotStatus={screenshotStatus} 
+      <StatusBar
+        status={status}
+        screenshotStatus={screenshotStatus}
         provider={currentProvider.provider}
         model={currentProvider.model}
       />
