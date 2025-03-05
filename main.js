@@ -2,7 +2,26 @@ import { app, BrowserWindow, globalShortcut, ipcMain } from "electron";
 import screenshotDesktop from "screenshot-desktop";
 import AIStrategyFactory from "./src/(core)/ai/providerFactory.js";
 import dotenv from "dotenv";
+import { execFile } from "child_process";
 import path from "path";
+
+function setWindowDisplayAffinity(windowHandle, affinity) {
+  return new Promise((resolve, reject) => {
+    // Path to the compiled C++ executable
+    const executablePath = path.join(__dirname, "SetWindowAffinity.exe");
+
+    // Call the executable with the window handle and affinity value
+    execFile(executablePath, [windowHandle, affinity], (error, stdout, stderr) => {
+      if (error) {
+        console.error("Error setting window display affinity:", stderr);
+        reject(error);
+      } else {
+        console.log("SetWindowDisplayAffinity result:", stdout);
+        resolve(stdout.trim() === "Success");
+      }
+    });
+  });
+}
 
 // Load environment variables
 dotenv.config();
@@ -12,6 +31,38 @@ let isVisible = true;
 let lastScreenshot = null;
 let aiStrategy = null;
 let isSettingsOpen = false;
+
+function applyScreenCaptureProtection(window) {
+  if (process.platform === "win32") {
+    try {
+      // Get the native window handle as a Buffer
+      const hwndBuffer = window.getNativeWindowHandle();
+
+      // Convert the Buffer to a string representation of the HWND
+      const hwnd = hwndBuffer.readUInt32LE(0); // Read the first 4 bytes (32-bit HWND)
+
+      setWindowDisplayAffinity(hwnd, 0x00000011) // WDA_EXCLUDEFROMCAPTURE
+        .then((result) => {
+          console.log("Screen capture protection applied:", result);
+        })
+        .catch((error) => {
+          console.error("Failed to apply screen capture protection:", error);
+        });
+    } catch (error) {
+      console.error("Error applying screen capture protection:", error);
+    }
+  }
+}
+
+// Function to take a screenshot
+async function screenshot() {
+  try {
+    return await screenshotDesktop();
+  } catch (error) {
+    console.error("Screenshot error:", error);
+    throw error;
+  }
+}
 
 // Initialize the AI strategy
 async function initializeAI(settings) {
@@ -25,7 +76,7 @@ async function initializeAI(settings) {
     console.error(
       `API key for ${provider} not found in environment variables or settings`,
     );
-    return false;
+    // return false;
   }
 
   try {
@@ -44,7 +95,7 @@ async function initializeAI(settings) {
   }
 }
 
-app.disableHardwareAcceleration();
+// app.disableHardwareAcceleration();
 
 async function createWindow() {
   // Initialize AI strategy
@@ -77,12 +128,8 @@ async function createWindow() {
   });
 
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  mainWindow.setAlwaysOnTop(true, "torn-off-menu", 1);
-  mainWindow.setContentProtection(true);
-  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setAlwaysOnTop(true, "screen-saver", 1);
   mainWindow.setContentProtection(true);
-  mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
   function updateMouseInteraction() {
     mainWindow.setIgnoreMouseEvents(!isSettingsOpen, { forward: true });
@@ -104,6 +151,11 @@ async function createWindow() {
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
     mainWindow.setAspectRatio(600 / 800);
+    
+    // Apply screen capture protection after the window is shown
+    if (process.platform === 'win32') {
+      applyScreenCaptureProtection(mainWindow);
+    }
   });
 
   mainWindow.loadFile("index.html");
@@ -120,14 +172,29 @@ async function createWindow() {
       mainWindow.hide();
     } else {
       mainWindow.show();
+      // Re-apply protection when showing the window
+      if (process.platform === 'win32') {
+        applyScreenCaptureProtection(mainWindow);
+      }
     }
     isVisible = !isVisible;
   });
 
   globalShortcut.register("CommandOrControl+H", async () => {
     try {
+      // Temporarily disable protection to take screenshot
+      if (process.platform === 'win32') {
+        const hwnd = Buffer.from(mainWindow.getNativeWindowHandle());
+        user32.SetWindowDisplayAffinity(hwnd, WDA_NONE);
+      }
+      
       lastScreenshot = await screenshot();
       mainWindow.webContents.send("screenshot-taken");
+      
+      // Re-enable protection after screenshot
+      if (process.platform === 'win32') {
+        applyScreenCaptureProtection(mainWindow);
+      }
     } catch (error) {
       console.error("Screenshot error:", error);
     }
@@ -246,13 +313,27 @@ async function createWindow() {
     if (!global.currentSettings) {
       return {
         provider: process.env.AI_PROVIDER || "openai",
-        model: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
+        model: process.env.OPENAI_MODEL || "gpt=4o",
       };
     }
     return {
       provider: global.currentSettings.provider,
       model: global.currentSettings.model,
     };
+  });
+
+  // Add IPC handler to toggle screen capture protection
+  ipcMain.on("toggle-screen-protection", (event, enable) => {
+    if (process.platform === 'win32') {
+      const hwnd = Buffer.from(mainWindow.getNativeWindowHandle());
+      const result = user32.SetWindowDisplayAffinity(
+        hwnd, 
+        enable ? (WDA_EXCLUDEFROMCAPTURE || WDA_MONITOR) : WDA_NONE
+      );
+      event.reply("protection-toggled", result);
+    } else {
+      event.reply("protection-toggled", false);
+    }
   });
 }
 

@@ -50,8 +50,9 @@ function SettingsPanel({ providers, currentProvider, providerConfigs, onChangePr
     const handleKeyDown = (e) => {
       if (!providers.length) return;
 
+      console.log(e.ctrlKey, e.code)
       // Save changes shortcut
-      if (e.metaKey && e.shiftKey && e.location === 2) {
+      if (e.ctrlKey && e.code === "ShiftRight") {
         e.preventDefault();
         if (apiKey) {
           handleSubmit(e);
@@ -247,7 +248,7 @@ function SettingsPanel({ providers, currentProvider, providerConfigs, onChangePr
               type="submit"
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-md transition-colors"
             >
-              Save Changes (⌘ + Right ⇧)
+              Save Changes (Ctrl + Right ⇧)
             </button>
           </div>
         </form>
