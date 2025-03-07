@@ -13,11 +13,12 @@ An AI-powered assistant for solving LeetCode problems using Claude 3.7. This too
 ## Setup
 
 1. Clone the repository
-2. Install dependencies:
+2. Install visual studio build tools 2022 and select desktop environment & nodejs options
+3. Install dependencies:
 ```bash
 npm install
 ```
-3. Set up your Claude API key:
+1. Set up your API keys:
 ```bash
 export ANTHROPIC_API_KEY='your-api-key-here'
 ```
